@@ -1,4 +1,8 @@
-admins = { "{{ .Env.JICOFO_AUTH_USER }}@{{ .Env.XMPP_AUTH_DOMAIN }}" }
+admins = {
+    "{{ .Env.JICOFO_AUTH_USER }}@{{ .Env.XMPP_AUTH_DOMAIN }}",
+    "{{ .Env.JVB_AUTH_USER }}@{{ .Env.XMPP_AUTH_DOMAIN }}"
+}
+
 plugin_paths = { "/prosody-plugins/", "/prosody-plugins-custom" }
 http_default_host = "{{ .Env.XMPP_DOMAIN }}"
 
@@ -46,6 +50,8 @@ VirtualHost "{{ .Env.XMPP_DOMAIN }}"
         "bosh";
         "pubsub";
         "ping";
+        "speakerstats";
+        "conference_duration";
         {{ if .Env.XMPP_MODULES }}
         "{{ join "\";\n\"" (splitList "," .Env.XMPP_MODULES) }}";
         {{ end }}
@@ -53,6 +59,9 @@ VirtualHost "{{ .Env.XMPP_DOMAIN }}"
         "auth_cyrus";
         {{end}}
     }
+
+    speakerstats_component = "speakerstats.{{ .Env.XMPP_DOMAIN }}"
+    conference_duration_component = "conferenceduration.{{ .Env.XMPP_DOMAIN }}"
 
     c2s_require_encryption = false
 
@@ -78,28 +87,36 @@ VirtualHost "{{ .Env.XMPP_RECORDER_DOMAIN }}"
 {{ end }}
 
 Component "{{ .Env.XMPP_INTERNAL_MUC_DOMAIN }}" "muc"
+    storage = "memory"
     modules_enabled = {
         "ping";
         {{ if .Env.XMPP_INTERNAL_MUC_MODULES }}
         "{{ join "\";\n\"" (splitList "," .Env.XMPP_INTERNAL_MUC_MODULES) }}";
         {{ end }}
     }
-    storage = "memory"
-    muc_room_cache_size = 1000
+    muc_room_locking = false
+    muc_room_default_public_jids = true
 
 Component "{{ .Env.XMPP_MUC_DOMAIN }}" "muc"
     storage = "memory"
     modules_enabled = {
+        "muc_meeting_id";
         {{ if .Env.XMPP_MUC_MODULES }}
         "{{ join "\";\n\"" (splitList "," .Env.XMPP_MUC_MODULES) }}";
         {{ end }}
-        {{ if eq $AUTH_TYPE "jwt" }}
+        {{ if and $ENABLE_AUTH (eq $AUTH_TYPE "jwt") }}
         "{{ $JWT_TOKEN_AUTH_MODULE }}";
         {{ end }}
     }
+    muc_room_cache_size = 1000
     muc_room_locking = false
     muc_room_default_public_jids = true
 
 Component "focus.{{ .Env.XMPP_DOMAIN }}"
     component_secret = "{{ .Env.JICOFO_COMPONENT_SECRET }}"
 
+Component "speakerstats.{{ .Env.XMPP_DOMAIN }}" "speakerstats_component"
+    muc_component = "{{ .Env.XMPP_MUC_DOMAIN }}"
+
+Component "conferenceduration.{{ .Env.XMPP_DOMAIN }}" "conference_duration_component"
+    muc_component = "{{ .Env.XMPP_MUC_DOMAIN }}"
